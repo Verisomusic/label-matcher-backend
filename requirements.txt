@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 pydub
-librosa>=1.4.0
+librosa==0.11.0
 spotipy
 python-multipart
 numpy
