@@ -1,74 +1,56 @@
-import uvicorn
-from fastapi import FastAPI, File, UploadFile
-from pydub import AudioSegment
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 import librosa
-from spotipy import Spotify
-from spotipy.oauth2 import SpotifyClientCredentials
 import tempfile
+import traceback
 
 app = FastAPI()
 
-# Spotify auth
-sp = Spotify(auth_manager=SpotifyClientCredentials(
-    client_id="YOUR_SPOTIFY_CLIENT_ID",
-    client_secret="YOUR_SPOTIFY_CLIENT_SECRET"
-))
-
-def extract_features(audio_file):
-    y, sr = librosa.load(audio_file, sr=44100)
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    key = librosa.feature.chroma_stft(y=y, sr=sr).mean(axis=1).argmax()
-    return tempo, int(key)
+# Enable CORS so your frontend can talk to this backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # allow all domains
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
-    # Save audio file temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-        contents = await file.read()
-        tmp.write(contents)
-        tmp_path = tmp.name
+    try:
+        print(f"Received file: {file.filename}")  # log incoming file
 
-    # Extract basic audio features
-    tempo, key = extract_features(tmp_path)
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
 
-    # Search Spotify for similar tracks using audio features
-    recos = sp.recommendations(
-        limit=20,
-        seed_genres=None,
-        min_tempo=tempo - 5,
-        max_tempo=tempo + 5,
-    )
+        print(f"Saved temporary file at: {tmp_path}")
 
-    # Collect label info
-    labels = {}
-    similar_tracks = []
+        # Load audio with librosa
+        audio, sr = librosa.load(tmp_path, mono=True)
+        tempo, beats = librosa.beat.beat_track(audio, sr=sr)
 
-    for track in recos["tracks"]:
-        # Track info
-        artist = track["artists"][0]["name"]
-        title = track["name"]
-        album = sp.album(track["album"]["id"])
-        label = album.get("label", "Unknown")
+        print(f"Analysis complete: tempo={tempo}")
 
-        similar_tracks.append({
-            "artist": artist,
-            "title": title,
-            "label": label
-        })
+        # Dummy labels (replace with your matching algorithm)
+        matching_labels = [
+            {"label": "Anjunadeep", "score": 0.92},
+            {"label": "Monstercat", "score": 0.89},
+        ]
 
-        labels[label] = labels.get(label, 0) + 1
+        # Dummy similar tracks
+        similar_tracks = [
+            {"artist": "Artist 1", "title": "Track A", "label": "Label X"},
+            {"artist": "Artist 2", "title": "Track B", "label": "Label Y"},
+        ]
 
-    # Sort labels by count
-    sorted_labels = sorted(
-        [{"label": l, "count": c} for l, c in labels.items()],
-        key=lambda x: x["count"],
-        reverse=True
-    )
+        return {
+            "tempo": float(tempo),
+            "labels": matching_labels,
+            "tracks": similar_tracks
+        }
 
-    return {
-        "labels": sorted_labels[:10],
-        "tracks": similar_tracks
-    }
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    except Exception as e:
+        print("ERROR:", e)
+        traceback.print_exc()
+        return {"error": str(e)}
