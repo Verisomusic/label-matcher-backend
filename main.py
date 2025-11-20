@@ -32,7 +32,7 @@ async def analyze(file: UploadFile = File(...)):
         print(f"Loaded audio: {len(audio)} samples at {sr} Hz")
 
         # Analyze tempo
-        tempo, beats = librosa.beat.beat_track(y=audio, sr=sr)
+        tempo, beats = librosa.beat.beat_track(audio, sr)
         print(f"Analysis complete: tempo={tempo}")
 
         # Dummy labels (replace with your matching logic later)
