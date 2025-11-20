@@ -4,3 +4,4 @@ pydub
 librosa
 spotipy
 python-multipart
+numpy
