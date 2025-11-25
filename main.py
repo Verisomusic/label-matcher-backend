@@ -1,59 +1,54 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import librosa
+import numpy as np
 import tempfile
-import traceback
+import os
 
 app = FastAPI()
 
-# Enable CORS
+# Allow your React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # allow all domains
+    allow_origins=["*"],  # change to your domain later
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 @app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze_track(file: UploadFile = File(...)):
     try:
         print(f"Received file: {file.filename}")
 
         # Save uploaded file temporarily
-        suffix = ".wav" if file.filename.lower().endswith(".wav") else ".mp3"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(await file.read())
             tmp_path = tmp.name
 
-        print(f"Saved temporary file at: {tmp_path}")
+        print(f"Saved temp file at {tmp_path}")
 
-        # Load audio with standard sample rate
-        audio, sr = librosa.load(tmp_path, sr=22050, mono=True)
-        print(f"Loaded audio: {len(audio)} samples at {sr} Hz")
+        # Load audio at 22,050 Hz
+        audio, sr = librosa.load(tmp_path, sr=22050)
+        print(f"Loaded audio: {len(audio)} samples")
 
-        # Analyze tempo
-        tempo, beats = librosa.beat.beat_track(audio, sr)
-        print(f"Analysis complete: tempo={tempo}")
+        # Beat detection
+        tempo, _ = librosa.beat.beat_track(y=audio, sr=sr)
+        print(f"Detected tempo: {tempo}")
 
-        # Dummy labels (replace with your matching logic later)
-        matching_labels = [
-            {"label": "Anjunadeep", "score": 0.92},
-            {"label": "Monstercat", "score": 0.89},
-        ]
+        # Spectral features
+        spectral_centroid = float(np.mean(librosa.feature.spectral_centroid(y=audio, sr=sr)))
+        spectral_bandwidth = float(np.mean(librosa.feature.spectral_bandwidth(y=audio, sr=sr)))
 
-        # Dummy similar tracks
-        similar_tracks = [
-            {"artist": "Artist 1", "title": "Track A", "label": "Label X"},
-            {"artist": "Artist 2", "title": "Track B", "label": "Label Y"},
-        ]
+        # Clean up
+        os.remove(tmp_path)
 
         return {
             "tempo": float(tempo),
-            "labels": matching_labels,
-            "tracks": similar_tracks
+            "centroid": spectral_centroid,
+            "bandwidth": spectral_bandwidth
         }
 
     except Exception as e:
-        print("ERROR:", e)
-        traceback.print_exc()
+        print("ERROR:", str(e))
         return {"error": str(e)}
